@@ -21,6 +21,7 @@ import com.androidwind.androidquick.demo.tool.GlideUtils;
 import com.androidwind.androidquick.demo.tool.RxUtil;
 import com.androidwind.androidquick.module.exception.ApiException;
 import com.androidwind.androidquick.module.rxjava.BaseObserver;
+import com.androidwind.androidquick.util.LogUtil;
 import com.androidwind.androidquick.util.StringUtil;
 import com.androidwind.androidquick.util.ToastUtil;
 import com.androidwind.annotation.annotation.BindTag;
@@ -61,6 +62,7 @@ import io.reactivex.Observer;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Action;
 import io.reactivex.functions.BiConsumer;
 import io.reactivex.functions.BiFunction;
 import io.reactivex.functions.Consumer;
@@ -72,6 +74,14 @@ import io.reactivex.subjects.Subject;
 
 
 /**
+ * Rx1.0-----------Rx2.0
+ * <p>
+ * Func1--------Function
+ * Action1--------Action
+ * Action1--------Consumer
+ * Action2--------BiConsumer
+ * 后面的Action都去掉了，只保留了ActionN
+ *
  * @author ddnosh
  * @website http://blog.csdn.net/ddnosh
  */
@@ -100,7 +110,8 @@ public class RxJavaFragment extends BaseFragment {
     @OnClick({R.id.btn_rxjava_create, R.id.btn_rxjava_just, R.id.btn_rxjava_from, R.id.btn_rxjava_map,
             R.id.btn_rxjava_flatmap, R.id.btn_rxjava_thread, R.id.tv_rxjava_more, R.id.btn_rxjava_by_manual,
             R.id.btn_rxjava_flowable, R.id.btn_rxjava_concat, R.id.btn_rxjava_lifecycle1, R.id.btn_rxjava_lifecycle2,
-            R.id.btn_rxjava_lifecycle3, R.id.btn_rxjava_example, R.id.btn_rxjava_error, R.id.btn_rxjava_zip, R.id.btn_rxjava_merge, R.id.btn_rxjava_zip_async})
+            R.id.btn_rxjava_lifecycle3, R.id.btn_rxjava_example, R.id.btn_rxjava_error, R.id.btn_rxjava_zip,
+            R.id.btn_rxjava_merge, R.id.btn_rxjava_zip_async, R.id.btn_rxjava_merge_async})
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.btn_rxjava_create:
@@ -138,6 +149,9 @@ public class RxJavaFragment extends BaseFragment {
             case R.id.btn_rxjava_merge:
                 testMerge();
                 break;
+            case R.id.btn_rxjava_merge_async:
+                testMergeAsync();
+                break;
             case R.id.btn_rxjava_zip:
                 testZip();
                 break;
@@ -159,6 +173,14 @@ public class RxJavaFragment extends BaseFragment {
             case R.id.btn_rxjava_error:
                 testError();
                 break;
+        }
+    }
+
+    private static class User {
+        public String name;
+
+        public User(String name) {
+            this.name = name;
         }
     }
 
@@ -199,6 +221,22 @@ public class RxJavaFragment extends BaseFragment {
                 ToastUtil.showToast("create done!");
             }
         });
+
+        Observable.create(emitter -> {
+            LogUtil.d(TAG, "【开始create】");
+            emitter.onNext("【begin!!!】");
+            emitter.onComplete();
+            LogUtil.d(TAG, "【结束create】");
+        })
+                .doOnNext(s -> LogUtil.d(TAG, "【doOnNext】"))
+                .doOnError(e -> LogUtil.d(TAG, "【doOnError】"))
+                .doOnComplete(() -> LogUtil.d(TAG, "【doOnComplete】"))
+                .doOnSubscribe(disposable -> LogUtil.d(TAG, "【doOnSubscribe】"))
+                .doFinally(() -> LogUtil.d(TAG, "【doFinally】"))
+                .subscribe(o -> LogUtil.d(TAG, "【onNext】"),
+                        e -> LogUtil.d(TAG, "【onError】"),
+                        () -> LogUtil.d(TAG, "【onComplete】"),
+                        d -> LogUtil.d(TAG, "【onSubscribe】"));
     }
 
     //--------Just
@@ -479,6 +517,7 @@ public class RxJavaFragment extends BaseFragment {
     }
 
     //--------Flowable
+
     /**
      * 注意：只有在有背压需求的时候才需要使用Flowable, 否则使用Observable, 不然会影响性能
      */
@@ -536,67 +575,6 @@ public class RxJavaFragment extends BaseFragment {
                 return "3";
             }
         });
-    }
-
-    /**
-     * concat将多个发射器合并成一个发射器, 依次发送，发送完一个再接着发送第二个
-     */
-    private void testConcat() {
-        Observable<String> o1 = Observable.create(new ObservableOnSubscribe<String>() {
-            @Override
-            public void subscribe(ObservableEmitter<String> e) {
-                try {
-                    Thread.sleep(1000); // 假设此处是耗时操作
-                } catch (Exception ee) {
-                    ee.printStackTrace();
-                }
-                e.onNext("1");
-                e.onComplete();//必须加这个, 否则o2出现不了
-            }
-        });
-        Observable<String> o2 = Observable.create(new ObservableOnSubscribe<String>() {
-            @Override
-            public void subscribe(ObservableEmitter<String> e) {
-                try {
-                    Thread.sleep(1000); // 假设此处是耗时操作
-                } catch (Exception ee) {
-                    ee.printStackTrace();
-                }
-                e.onNext("2");
-                e.onComplete();
-            }
-        });
-        Observable.concat(o1, o2, getObservable())
-                .compose(RxUtil.applySchedulers())
-                .compose(lifecycleProvider.bindUntilEvent(Lifecycle.Event.ON_DESTROY))
-                .subscribe(new Observer<String>() {
-                    @Override
-                    public void onSubscribe(Disposable d) {
-
-                    }
-
-                    @Override
-                    public void onNext(String s) {
-                        Log.d(TAG, s);
-                        if ("1".equals(s)) {
-                            ToastUtil.showToast("concat: 1");
-                        } else if ("2".equals(s)) {
-                            ToastUtil.showToast("concat: 2");
-                        } else if ("3".equals(s)) {
-                            ToastUtil.showToast("concat: 3");
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable e) {
-
-                    }
-
-                    @Override
-                    public void onComplete() {
-                        ToastUtil.showToast("concat done!");
-                    }
-                });
     }
 
     //--------Lifecycle CompositeDisposable
@@ -835,16 +813,77 @@ public class RxJavaFragment extends BaseFragment {
         Observable
                 .concatArrayDelayError(observable1, observable2.onErrorResumeNext(Observable.empty()), observable3)
                 .subscribe(new BaseObserver<Integer>() {
-            @Override
-            public void onError(@NotNull ApiException e) {
+                    @Override
+                    public void onError(@NotNull ApiException e) {
 
-            }
+                    }
 
+                    @Override
+                    public void onSuccess(Integer integer) {
+                        Log.d(TAG, "onSuccess" + integer);
+                    }
+                });
+    }
+
+    /**
+     * Concat: 将多个发射器合并成一个发射器, 依次发送，发送完一个再接着发送第二个
+     */
+    private void testConcat() {
+        Observable<String> o1 = Observable.create(new ObservableOnSubscribe<String>() {
             @Override
-            public void onSuccess(Integer integer) {
-                Log.d(TAG, "onSuccess" + integer);
+            public void subscribe(ObservableEmitter<String> e) {
+                try {
+                    Thread.sleep(1000); // 假设此处是耗时操作
+                } catch (Exception ee) {
+                    ee.printStackTrace();
+                }
+                e.onNext("1");
+                e.onComplete();//必须加这个, 否则o2出现不了
             }
         });
+        Observable<String> o2 = Observable.create(new ObservableOnSubscribe<String>() {
+            @Override
+            public void subscribe(ObservableEmitter<String> e) {
+                try {
+                    Thread.sleep(1000); // 假设此处是耗时操作
+                } catch (Exception ee) {
+                    ee.printStackTrace();
+                }
+                e.onNext("2");
+                e.onComplete();
+            }
+        });
+        Observable.concat(o1, o2, getObservable())
+                .compose(RxUtil.applySchedulers())
+                .compose(lifecycleProvider.bindUntilEvent(Lifecycle.Event.ON_DESTROY))
+                .subscribe(new Observer<String>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+
+                    }
+
+                    @Override
+                    public void onNext(String s) {
+                        Log.d(TAG, s);
+                        if ("1".equals(s)) {
+                            ToastUtil.showToast("concat: 1");
+                        } else if ("2".equals(s)) {
+                            ToastUtil.showToast("concat: 2");
+                        } else if ("3".equals(s)) {
+                            ToastUtil.showToast("concat: 3");
+                        }
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        ToastUtil.showToast("concat done!");
+                    }
+                });
     }
 
     //--------Zip: zip操作符可以合并两个发射器，最终合并出结果，且最终结果的数目只和结果集少的那个相同，结果集是以发送时最少的为主输出合并数量
@@ -888,29 +927,6 @@ public class RxJavaFragment extends BaseFragment {
         });
     }
 
-    //merge: 会让合并的Observables发射的数据交错，这也就是和concat的较大区别(挨个发送)
-    private void testMerge() {
-        Observable<Integer> o1 = Observable.create(new ObservableOnSubscribe<Integer>() {
-            @Override
-            public void subscribe(ObservableEmitter<Integer> e) {
-                try {
-                    Thread.sleep(1000); // 假设此处是耗时操作
-                } catch (Exception ee) {
-                    ee.printStackTrace();
-                }
-                e.onNext(100);
-                e.onComplete();
-            }
-        });
-
-        Observable.merge(o1, Observable.just(3, 4, 5)).subscribe(new Consumer<Integer>() {
-            @Override
-            public void accept(Integer integer) throws Exception {
-                Log.d(TAG, integer + "");
-            }
-        });
-    }
-
     private void testZipAsync() {
         observable1 = observable1.subscribeOn(Schedulers.io());
         observable2 = observable2.subscribeOn(Schedulers.io());
@@ -923,6 +939,41 @@ public class RxJavaFragment extends BaseFragment {
             @Override
             public void accept(String o) throws Exception {
                 Log.d(TAG, o);
+            }
+        });
+    }
+
+    //merge: 会让合并的Observables发射的数据交错，这也就是和concat的较大区别(挨个发送)
+    Observable<Integer> o1 = Observable.create(new ObservableOnSubscribe<Integer>() {
+        @Override
+        public void subscribe(ObservableEmitter<Integer> e) {
+            try {
+                Thread.sleep(1000); // 假设此处是耗时操作
+            } catch (Exception ee) {
+                ee.printStackTrace();
+            }
+            e.onNext(100);
+            e.onComplete();
+        }
+    });
+    Observable<Integer> o2 = Observable.just(3, 4, 5);
+
+    private void testMerge() {
+        Observable.merge(o1, o2).compose(RxUtil.applySchedulers()).subscribe(new Consumer<Integer>() {
+            @Override
+            public void accept(Integer integer) throws Exception {
+                Log.d(TAG, integer + "");
+            }
+        });
+    }
+
+    private void testMergeAsync() {
+        o1 = o1.subscribeOn(Schedulers.io());
+        o2 = o2.subscribeOn(Schedulers.io());
+        Observable.merge(o1, o2).compose(RxUtil.applySchedulers()).subscribe(new Consumer<Integer>() {
+            @Override
+            public void accept(Integer integer) throws Exception {
+                Log.d(TAG, integer + "");
             }
         });
     }
